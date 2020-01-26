@@ -24,7 +24,7 @@ shell> cp rogygarden.cfg-example rogygarden.cfg
 Edit the rogygarden.cfg file, and set your configuration for communication.  
 
 Download your favorite MQTT mobile app.  I used 'IoT MQTT Panel' on Android.  Point the app
-at the
+at the Adafruit feed and setup your MQTT app to display the JSON sent from the garden.
 
 # GPIO Pin definition
 
