@@ -2,6 +2,7 @@
 
 import time
 import sys
+import os
 import gpiozero as ioz
 from Adafruit_IO import MQTTClient
 import json
@@ -156,8 +157,6 @@ class RogyGardenRoof:
         self._roof_state_detection(enable=False)
 
         self.roof_closed_detect_reason = poll_reason
-        # print("Close detect:", self._roof_closed_detect_com.value, _closed_statusA,
-        # _closed_statusB, _closed_statusA | _closed_statusB)
 
         return retval
 
@@ -214,6 +213,7 @@ class RogyGardenRoof:
             if self.roof_closed is None:
                 self.roof_closed = target_roof_closed_state
 
+        # Ramping speed for variable rate motor control - Not used
         # for mspeed in range(int(100*self.ramp_start), 100, int(100*self.ramp_step)):
         #     if direction == 'open':
         #         self._roof_motor.forward((100-mspeed)/100)
@@ -249,11 +249,9 @@ class RogyGardenRoof:
             garden.log('Cant toggle roof due to unknown state!')
 
     def __str__(self):
-        rstr = 'Closed={0}, CDetect={1}, Motor_enabled={2}'.format(self.roof_closed,
-                                                                        self.roof_closed_detect_reason,
-                                                                        self._roof_motor_enable.is_active)
+        rstr = 'Closed={0}, CDetect={1}, Motor_enabled={2}'.format(self.roof_closed, self.roof_closed_detect_reason,
+                                                                   self._roof_motor_enable.is_active)
 
-        #print(rstr)
         return str(rstr)
 
     def read(self):
@@ -316,7 +314,6 @@ class RogyGarden:
         self.controllers_status_json = ''
 
     def log(self, msg):
-
         self.event_log.append('"{0}"'.format(msg))
 
     def flush_log(self):
@@ -332,16 +329,13 @@ class RogyGarden:
         self.controllers[controller_type]['active'] = True
         self.controllers[controller_type]['status'] = controller_obj
 
-        # Hack job
+        # Hack job - ugh
         # if controller_type == 'roof':
         #     self.health['is_protected'] = controller_obj.roof_closed
 
     def update_controllers(self):
 
-        #print(self.controllers)
         self.controllers_status_json = ''
-
-        # value = '{{"sensor1":{0},"sensor2":{1} }}'.format(value1, value2)
 
         for c_key in self.controllers.keys():
             if self.controllers[c_key]['active'] is True:
@@ -366,9 +360,6 @@ class RogyGarden:
 
             self.controllers_status_json += '{0}}}'.format(controller_item_json)
 
-        # self.controllers_status_json += '}'
-        # print(self.controllers_status_json)
-
     def register_sensor(self, sensor_type, sensor_obj):
 
         if sensor_type not in self.sensors:
@@ -383,10 +374,7 @@ class RogyGarden:
 
         self.sensors_status_json = ''
 
-        # print("Sensor structure:", self.sensors)
-
         for s_key in self.sensors.keys():
-            # print("Updating sensor key:", s_key)
             if self.sensors[s_key]['active'] is True:
                 self.sensors[s_key]['val'], self.sensors[s_key]['status'] = self.sensors[s_key]['obj'].read_data_val(s_key)
 
@@ -471,25 +459,25 @@ class RogyGarden:
         if self.controllers['roof']['active'] is True:
             self.controllers['roof']['obj'].do_close()
             self.status_update()
-            # self.health['is_protected'] = 'yes'
 
     def unprotect(self):
         if self.controllers['roof']['active'] is True:
             self.controllers['roof']['obj'].do_open()
             self.status_update()
-            # self.health['is_protected'] = 'no'
 
     def __str__(self):
         rstr = ['{0}={1}'.format(k, self.sensors[k]['val']) for k in self.sensors.keys() if self.sensors[k]['active']]
-        #print(rstr)
         return str(rstr)
 
     def free(self, reason='RogyGarden exception, shutting down'):
         _dying_gasp = '{{"current_status": "OFFLINE", "needs_attention": "True", "active": "False", ' \
                       '"is_connected": "no", "event_log":["{0}"]}}'.format(reason)
 
-        print('Sending Dying Gasp:', _dying_gasp)
-        mqt.send_message(_dying_gasp, max_time=2)
+        # Update app that we are shutting down
+        if mqt.is_connected is True:
+            print('Sending Dying Gasp:', _dying_gasp)
+            mqt.send_message(_dying_gasp, max_time=2)
+
         for g_key in self.sensors.keys():
             if self.sensors[g_key]['active'] is True:
                 self.sensors[g_key]['obj'].free()
@@ -500,13 +488,45 @@ class RogyGarden:
 
 
 class AdafruitIOMQT:
+    '''
+    Class wrapper for adafruitIO communication
+    '''
 
-    def __init__(self, user_name, user_key, mqt_feed):
+    def __init__(self, adafruitio_cfgfile='adafruitIO.cfg'):
+
+        self.cfgfile = adafruitio_cfgfile
+        self.username = 'username_not_defined_in_cfg'
+        self.key = 'hashkey_not_defined_in_cfg'
+        self.mqt_feed = '/feeds/RogyGarden'
+
+        _cfgopts = ['ADAFRUIT_IO_USERNAME', 'ADAFRUIT_IO_KEY', 'ADAFRUIT_IO_FEED']
+
+        # Read config file...if there is one
+        if os.path.isfile(self.cfgfile):
+            with open(self.cfgfile, mode='r') as f:
+                _configlines = f.read().splitlines()
+            f.close()
+
+            for _i in _configlines:
+                _cline = _i.split("=")
+                if _cline[0] not in _cfgopts:
+                    continue
+                if _cline[0] == 'ADAFRUIT_IO_USERNAME':
+                    self.username = _cline[1]
+                if _cline[0] == 'ADAFRUIT_IO_KEY':
+                    self.key = _cline[1]
+                if _cline[0] == 'ADAFRUIT_IO_FEED':
+                    self.mqt_feed = _cline[1]
+
+        print('AdafruitIO config username:{0}, key:{1}, feed: {2}'.format(self.username, self.key, self.mqt_feed))
+
+        if self.username == 'username_not_defined_in_cfg':
+            print('Warning username not found in config, check your config file')
 
         # Create an MQTT client instance.
-        self._mqtclient = MQTTClient(user_name, user_key)
+        self._mqtclient = MQTTClient(self.username, self.key)
         self.is_connected = False
-        self.current_feed = mqt_feed
+        self.current_feed = self.mqt_feed
         self.last_sent_msg_ts = None
 
         # Setup the callback functions defined above.
@@ -521,7 +541,7 @@ class AdafruitIOMQT:
 
     def on_connected(self, callback_client):
         callback_client.subscribe(self.current_feed)
-        print('Got connected to feed:', self.current_feed)
+        print('AdafruitIO -> Got connected to feed:', self.current_feed)
         self.is_connected = True
         garden.health['is_connected'] = 'yes'
 
@@ -533,14 +553,14 @@ class AdafruitIOMQT:
         # Message function will be called when a subscribed feed has a new value.
         # The feed_id parameter identifies the feed, and the payload parameter has
         # the new value.
-        print('Feed {0} received new value: {1}'.format(feed_id, payload))
+        print('AdafruitIO -> Feed {0} received new value: {1}'.format(feed_id, payload))
         if 'cmd' in payload:
             garden.process_cmd(payload)
 
     def send_message(self, msg, max_time=10):
 
         if self.is_connected is False:
-            print('Cant publish message, mqt not connected!')
+            print('AdafruitIO -> Cant publish message, mqt not connected!')
             return False
 
         if max_time < 2:
@@ -549,7 +569,7 @@ class AdafruitIOMQT:
         if self.last_sent_msg_ts is not None:
             elapsed_time = time.mktime(time.localtime()) - self.last_sent_msg_ts
             if elapsed_time < max_time:
-                print('Cant send mqt more than once every {0} seconds, last sent: {1}'.format(
+                print('AdafruitIO -> Cant send mqt more than once every {0} seconds, last sent: {1}'.format(
                       max_time,
                       time.asctime(time.localtime(self.last_sent_msg_ts))))
                 return False
@@ -565,6 +585,10 @@ class AdafruitIOMQT:
 
 
 def run():
+    '''
+    Main run
+    :return: null
+    '''
 
     # vbat = machine.ADC(36)
     # vbat.atten(vbat.ATTN_11DB)
@@ -581,12 +605,10 @@ def run():
     # GPIO23 = Enable motor power pin
     # GPIO24 = Roof Lock engage pin
     #
+    # Testing rain water detector sensor - not implemented
     # gs = RogySensorAnalog(36)
     # garden.register_sensor('rain_detect', RogySensorAnalog(36))
 
-    # roof = RogyGardenRoof(motor_enable_pin=23, motor_forward_pin=13, motor_backward_pin=19,
-    #                       detect_com_pin=20, detect_a_closed_pin=16, detect_a_open_pin=17,
-    #                       detect_b_open_pin=27, detect_b_closed_pin=22)
     roof = RogyGardenRoof(motor_enable_pin=23, motor_forward_pin=13, motor_backward_pin=19,
                           detect_com_pin=20, detect_a_closed_pin=16, detect_a_open_pin=17,
                           detect_b_open_pin=27, detect_b_closed_pin=22)
@@ -605,14 +627,14 @@ def run():
     garden.register_sensor('current', ina260)
     garden.register_sensor('power', ina260)
 
-
     counter = 0
     while True:
         garden.status_update()
         print(garden)
         print("sending to mqt:", garden.status_json)
         mqt.send_message(garden.status_json)
-        #if counter > 1 and counter % 2 == 0:
+        # Debugging/testing stuff
+        # if counter > 1 and counter % 2 == 0:
         #    time.sleep(10)
         #     garden.protect()
         # if counter > 1 and counter % 11 == 0:
@@ -622,10 +644,15 @@ def run():
 
 
 if __name__ == '__main__':
+
+    # Create a garden class to work with
     garden = RogyGarden()
-    # Setup AIO connection (You need to setup this up at adafruit.io)
-    mqt = AdafruitIOMQT('username', 'hashkey', 'stream')
+
+    # Connect to AdafruitIO
+    mqt = AdafruitIOMQT(adafruitio_cfgfile='rogygarden.cfg')
+
     shutdown_reason = ''
+
     try:
         run()
 

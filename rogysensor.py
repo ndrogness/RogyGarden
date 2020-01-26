@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import time
 from collections import namedtuple
 try:
@@ -81,11 +83,8 @@ class RogySensorI2C(RogySensor):
         if len(self.vals_ts) > self.history:
             del self.vals_ts[self.history]
 
-        # print(len(self.vals), self.vals)
-        # print(len(self.vals_ts), self.vals_ts)
         if return_value is True:
             if pretty_format is True:
-                #print(self.vals)
                 return ['{0}={1}{2}'.format(sd.name, sd.val, sd.units) for sd in self.vals[0]]
 
             else:
@@ -185,7 +184,6 @@ def main():
     # vbat.atten(vbat.ATTN_11DB)
     # VBAT = Pin 35
 
-    # gs = RogySensorAnalog(36)
     bmp280 = RogyBMP280()
     ina260 = RogyINA260()
 
