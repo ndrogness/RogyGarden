@@ -103,11 +103,20 @@ class RogyBMP280(RogySensorI2C):
 
         try:
             import bmp280
-            # self.rs_i2c = machine.I2C(scl=machine.Pin(scl_pin), sda=machine.Pin(sda_pin))
-            self._sensor = bmp280.BMP280(i2c_dev=self.i2c_bus)
 
         except ImportError as err:
-            print('Cant start i2c sensor:', err)
+            print('Missing bmp280 library:', err)
+            self.active = False
+            return
+
+        try:
+            self._sensor = bmp280.BMP280(i2c_dev=self.i2c_bus)
+            # self.rs_i2c = machine.I2C(scl=machine.Pin(scl_pin), sda=machine.Pin(sda_pin))
+            # Try a read
+            self._sensor.get_temperature()
+
+        except RuntimeError as err:
+            print('Cant start BMP280 sensor:', err)
             self.active = False
             return
 
@@ -148,10 +157,17 @@ class RogyINA260(RogySensorI2C):
             import board
             import busio
             import adafruit_ina260
-            self._sensor = adafruit_ina260.INA260(busio.I2C(board.SCL, board.SDA))
 
         except ImportError as err:
-            print('Cant start i2c sensor:', err)
+            print('Missing INA260 sensor library:', err)
+            self.active = False
+            return
+
+        try:
+            self._sensor = adafruit_ina260.INA260(busio.I2C(board.SCL, board.SDA))
+
+        except ValueError as err2:
+            print('Cant start INA260 sensor:', err2)
             self.active = False
             return
 

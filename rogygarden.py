@@ -462,8 +462,8 @@ class RogyGarden:
 
     def unprotect(self):
         if self.controllers['roof']['active'] is True:
-            self.controllers['roof']['obj'].do_open()
-            self.status_update()
+           self.controllers['roof']['obj'].do_open()
+           self.status_update()
 
     def __str__(self):
         rstr = ['{0}={1}'.format(k, self.sensors[k]['val']) for k in self.sensors.keys() if self.sensors[k]['active']]
@@ -617,15 +617,21 @@ def run():
 
     # Register temp sensor
     bmp280 = rogysensor.RogyBMP280(samples_per_read=5)
-    garden.register_sensor('temp', bmp280)
-    garden.register_sensor('bar_pres', bmp280)
-    garden.register_sensor('altitude', bmp280)
+    if bmp280.active is True:
+        garden.register_sensor('temp', bmp280)
+        garden.register_sensor('bar_pres', bmp280)
+        garden.register_sensor('altitude', bmp280)
+    else:
+        print('WARNING: BMP280 sensor offline, not measuring temperature')
 
     # Register battery system power usage
     ina260 = rogysensor.RogyINA260(samples_per_read=5)
-    garden.register_sensor('voltage', ina260)
-    garden.register_sensor('current', ina260)
-    garden.register_sensor('power', ina260)
+    if ina260.active is True:
+        garden.register_sensor('voltage', ina260)
+        garden.register_sensor('current', ina260)
+        garden.register_sensor('power', ina260)
+    else:
+        print('WARNING: INA260 sensor offline, not measuring voltage')
 
     counter = 0
     while True:
