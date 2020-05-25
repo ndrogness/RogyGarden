@@ -16,4 +16,4 @@
 
 ADAFRUIT_IO_USERNAME=your_adafruit_username
 ADAFRUIT_IO_KEY=dc5866e512024830d8alwr70368c3bb1
-ADAFRUIT_FEED=/feeds/RogyGarden
+ADAFRUIT_IO_FEED=/feeds/RogyGarden
