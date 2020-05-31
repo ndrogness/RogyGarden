@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 
 import time
+import datetime
 import sys
 import os
 import gpiozero as ioz
 from Adafruit_IO import MQTTClient
 import json
+from collections import namedtuple
 import rogysensor
 
 
 class RogyGardenRoof:
     def __init__(self, motor_enable_pin, motor_forward_pin, motor_backward_pin,
                  detect_com_pin=None, detect_a_open_pin=None, detect_a_closed_pin=None,
-                 detect_b_open_pin=None, detect_b_closed_pin=None):
+                 detect_b_open_pin=None, detect_b_closed_pin=None, debug=False):
 
         self.progress_update_json = ''
+        self.debug = debug
 
         # Setup Motor
         self._roof_motor = ioz.Motor(motor_forward_pin, motor_backward_pin)
@@ -91,8 +94,10 @@ class RogyGardenRoof:
             self._closed_switches_active[detect_b_closed_pin] = {'name': 'B_CLOSED', 'obj': self._roof_closed_detectB}
 
     def _roof_open_trigger(self, trigger_dev):
-        print("Received Open trigger:", trigger_dev.pin,
-              self._open_switches_active[trigger_dev.pin.number]['name'])
+
+        if self.debug is True:
+            print("Received Open trigger:", trigger_dev.pin, self._open_switches_active[trigger_dev.pin.number]['name'])
+
         self._detection_successful = True
         self.roof_closed = False
         self.roof_closed_detect_reason = 'trigger: {0}->{1}'.format(trigger_dev.pin,
@@ -111,8 +116,11 @@ class RogyGardenRoof:
                 self._motor_ctl(direction='stop')
 
     def _roof_closed_trigger(self, trigger_dev):
-        print("Received Closed trigger:", trigger_dev.pin,
-              self._closed_switches_active[trigger_dev.pin.number]['name'])
+
+        if self.debug is True:
+            print("Received Closed trigger:", trigger_dev.pin,
+                  self._closed_switches_active[trigger_dev.pin.number]['name'])
+
         self._detection_successful = True
         self.roof_closed = True
         self.roof_closed_detect_reason = 'trigger: {0}->{1}'.format(trigger_dev.pin,
@@ -152,8 +160,21 @@ class RogyGardenRoof:
         else:
             retval = self.roof_closed
 
-        print('Sw status:', self._roof_closed_detect_com.value, self._roof_closed_detectA.is_pressed,
-              self._roof_open_detectA.is_pressed, self._roof_open_detectB.is_pressed)
+        if self.debug is True:
+            rlog = 'Roof detect switch status: Common={0}'.format(self._roof_closed_detect_com.is_active)
+
+            rlog += ', Open Detect('
+            for _swi in self._open_switches_active:
+                _rswitch = self._open_switches_active[_swi]
+                rlog += ',{0}={1}'.format(_rswitch['name'], _rswitch['obj'].is_pressed)
+            rlog += '), Close Detect('
+            for _swi in self._closed_switches_active:
+                _rswitch = self._closed_switches_active[_swi]
+                rlog += ',{0}={1}'.format(_rswitch['name'], _rswitch['obj'].is_pressed)
+            rlog += ')'
+
+            print(rlog)
+
         self._roof_state_detection(enable=False)
 
         self.roof_closed_detect_reason = poll_reason
@@ -170,7 +191,8 @@ class RogyGardenRoof:
     def _motor_ctl(self, direction='open'):
 
         if direction == 'stop':
-            print("Stopping motor")
+            if self.debug is True:
+                print("Stopping motor")
             self._roof_motor.stop()
             self._roof_motor_enable.off()
             time.sleep(1)
@@ -188,13 +210,15 @@ class RogyGardenRoof:
             if direction == 'open':
                 self._roof_motor.backward(1)
                 target_roof_closed_state = False
-                print("motor moving backward -> roof opening")
+                if self.debug is True:
+                    print("motor moving backward -> roof opening")
                 garden.log('roof is opening')
 
             elif direction == 'close':
                 self._roof_motor.forward(1)
                 target_roof_closed_state = True
-                print("motor moving forward -> roof closing")
+                if self.debug is True:
+                    print("motor moving forward -> roof closing")
                 garden.log('roof is closing')
 
             # ## Broken - This was to see power impact of motors, but have async issues
@@ -270,18 +294,22 @@ class RogyGardenRoof:
         self._roof_motor_enable.off()
         self._roof_motor_enable.close()
         self._roof_state_detection(enable=False)
-        self._roof_closed_detectA.close()
-
+        '''
+        for _switch in self._closed_switches_active:
+            _switch['obj'].close()
+        for _switch in self._open_switches_active:
+            _switch['obj'].close()
+        '''
 
 class RogyGarden:
 
     sensor_types = ['temp', 'bar_pres', 'altitude', 'hail_detect', 'rain_detect',
                     'soil_moisture', 'voltage', 'current', 'power']
 
-    def __init__(self):
+    def __init__(self, config):
 
         self.event_log = []
-
+        self.config = config
         self.health = {
             'active': True,
             'needs_attention': False,
@@ -300,9 +328,9 @@ class RogyGarden:
             'temp': {'active': False, 'val': 0, 'status': 'Offline'},
             'bar_pres': {'active': False, 'val': 0, 'status': 'Offline'},
             'altitude': {'active': False, 'val': 0, 'status': 'Offline'},
-            'rain_detect': {'active': False, 'val': False, 'status': 'Offline'},
-            'hail_detect': {'active': False, 'val': False, 'status': 'Offline'},
-            'soil_moisture': {'active': False, 'val': 0, 'status': 'Offline'},
+            # 'rain_detect': {'active': False, 'val': False, 'status': 'Offline'},
+            # 'hail_detect': {'active': False, 'val': False, 'status': 'Offline'},
+            # 'soil_moisture': {'active': False, 'val': 0, 'status': 'Offline'},
             'roof_open': {'active': False, 'val': True, 'status': 'Offline'},
             'voltage': {'active': False, 'val': 0, 'status': 'Offline'},
             'current': {'active': False, 'val': 0, 'status': 'Offline'},
@@ -315,6 +343,7 @@ class RogyGarden:
 
     def log(self, msg):
         self.event_log.append('"{0}"'.format(msg))
+        # print(msg)
 
     def flush_log(self):
         self.event_log.clear()
@@ -342,6 +371,11 @@ class RogyGarden:
                 hkey, hval = self.controllers[c_key]['obj'].read()
                 self.controllers[c_key]['val'] = '{0}={1}'.format(hkey, hval)
                 self.health[hkey] = hval
+                if hval == 'unknown':
+                    self.health['needs_attention'] = True
+                    self.log('{0} Alarm: {1}'.format(c_key, self.controllers[c_key]['val']))
+                    if self.config['DEBUG']['val'] is True:
+                        print('Changing health status to needs attention:', self.controllers[c_key]['val'])
 
             if self.controllers_status_json == '':
                 self.controllers_status_json += '"{0}":{{'.format(c_key)
@@ -466,7 +500,10 @@ class RogyGarden:
            self.status_update()
 
     def __str__(self):
-        rstr = ['{0}={1}'.format(k, self.sensors[k]['val']) for k in self.sensors.keys() if self.sensors[k]['active']]
+        rstr_s = ['{0}={1}'.format(k, self.sensors[k]['val']) for k in self.sensors.keys() if self.sensors[k]['active']]
+        rstr_l = ['{0}'.format(self.event_log[i]) for i in range(0, len(self.event_log))]
+        rstr = '{0}: Sensors -> {1}, Event Log -> {2}'.format(self.health['last_update'], rstr_s, rstr_l)
+
         return str(rstr)
 
     def free(self, reason='RogyGarden exception, shutting down'):
@@ -476,7 +513,7 @@ class RogyGarden:
         # Update app that we are shutting down
         if mqt.is_connected is True:
             print('Sending Dying Gasp:', _dying_gasp)
-            mqt.send_message(_dying_gasp, max_time=2)
+            mqt.send_message(_dying_gasp, max_time=2, msg_debug=True)
 
         for g_key in self.sensors.keys():
             if self.sensors[g_key]['active'] is True:
@@ -492,35 +529,17 @@ class AdafruitIOMQT:
     Class wrapper for adafruitIO communication
     '''
 
-    def __init__(self, adafruitio_cfgfile='adafruitIO.cfg'):
+    def __init__(self, username, key, feed, debug=False):
 
-        self.cfgfile = adafruitio_cfgfile
-        self.username = 'username_not_defined_in_cfg'
-        self.key = 'hashkey_not_defined_in_cfg'
-        self.mqt_feed = '/feeds/RogyGarden'
+        self.username = username
+        self.key = key
+        self.mqt_feed = feed
+        self.debug = debug
 
-        _cfgopts = ['ADAFRUIT_IO_USERNAME', 'ADAFRUIT_IO_KEY', 'ADAFRUIT_IO_FEED']
+        if self.debug is True:
+            print('AdafruitIO config username:{0}, key:{1}, feed: {2}'.format(self.username, self.key, self.mqt_feed))
 
-        # Read config file...if there is one
-        if os.path.isfile(self.cfgfile):
-            with open(self.cfgfile, mode='r') as f:
-                _configlines = f.read().splitlines()
-            f.close()
-
-            for _i in _configlines:
-                _cline = _i.split("=")
-                if _cline[0] not in _cfgopts:
-                    continue
-                if _cline[0] == 'ADAFRUIT_IO_USERNAME':
-                    self.username = _cline[1]
-                if _cline[0] == 'ADAFRUIT_IO_KEY':
-                    self.key = _cline[1]
-                if _cline[0] == 'ADAFRUIT_IO_FEED':
-                    self.mqt_feed = _cline[1]
-
-        print('AdafruitIO config username:{0}, key:{1}, feed: {2}'.format(self.username, self.key, self.mqt_feed))
-
-        if self.username == 'username_not_defined_in_cfg':
+        if self.username == 'username_undefined':
             print('Warning username not found in config, check your config file')
 
         # Create an MQTT client instance.
@@ -543,6 +562,7 @@ class AdafruitIOMQT:
         callback_client.subscribe(self.current_feed)
         print('AdafruitIO -> Got connected to feed:', self.current_feed)
         self.is_connected = True
+        #self._mqtclient.subscribe(self.current_feed)
         garden.health['is_connected'] = 'yes'
 
     def on_disconnected(self, callback_client):
@@ -553,11 +573,12 @@ class AdafruitIOMQT:
         # Message function will be called when a subscribed feed has a new value.
         # The feed_id parameter identifies the feed, and the payload parameter has
         # the new value.
-        print('AdafruitIO -> Feed {0} received new value: {1}'.format(feed_id, payload))
+        if self.debug is True:
+            print('AdafruitIO -> Feed {0} received new value: {1}'.format(feed_id, payload))
         if 'cmd' in payload:
             garden.process_cmd(payload)
 
-    def send_message(self, msg, max_time=10):
+    def send_message(self, msg, max_time=10, msg_debug=False):
 
         if self.is_connected is False:
             print('AdafruitIO -> Cant publish message, mqt not connected!')
@@ -574,6 +595,9 @@ class AdafruitIOMQT:
                       time.asctime(time.localtime(self.last_sent_msg_ts))))
                 return False
 
+        # print("sending to mqt:", msg)
+        if msg_debug is True or self.debug is True:
+            print('Sending to mqt {0} -> {1}'.format(self.current_feed, msg))
         self._mqtclient.publish(self.current_feed, msg)
         self.last_sent_msg_ts = time.mktime(time.localtime())
         garden.flush_log()
@@ -582,6 +606,87 @@ class AdafruitIOMQT:
     def free(self):
         if self._mqtclient.is_connected():
             self._mqtclient.disconnect()
+
+
+def read_config(config_file, debug=False):
+    '''
+    Read Configuration File
+    :param config_file: filename of config file
+    :param debug: print debugging
+    :return: config dictionary
+    '''
+
+    # Defaults
+    config_item = namedtuple('ConfigItem', ['type', 'val', 'cast'])
+    config_data = {
+        'DEBUG': {'val': False, 'cast': 'boolean'},
+        'ROOF_MOTOR_ENABLE': {'val': 18, 'cast': 'int'},
+        'ROOF_MOTOR_FORWARD': {'val': 4, 'cast': 'int'},
+        'ROOF_MOTOR_REVERSE': {'val': 17, 'cast': 'int'},
+        'ROOF_DETECT_COMMON': {'val': 21, 'cast': 'int'},
+        'ROOF_DETECT_A_CLOSED': {'val': 20, 'cast': 'int'},
+        'ROOF_DETECT_A_OPEN': {'val': 16, 'cast': 'int'},
+        'ROOF_DETECT_B_CLOSED': {'val': 24, 'cast': 'int'},
+        'ROOF_DETECT_B_OPEN': {'val': 25, 'cast': 'int'},
+        'ADAFRUIT_IO_USERNAME': {'val': 'username_undefined', 'cast': 'text'},
+        'ADAFRUIT_IO_KEY': {'val': 'key_undefined', 'cast': 'text'},
+        'ADAFRUIT_IO_FEED': {'val': 'RogyGarden', 'cast': 'text'},
+    }
+
+    num_tokens = 0
+
+    if not os.path.isfile(config_file):
+        print('WARNING: Missing config file:', config_file, ', using default config values')
+        return config_data
+
+    with open(config_file, mode='r') as f:
+        config_lines = f.read().splitlines()
+
+    for i in range(0, len(config_lines)):
+
+        # Pickup Debug from config
+        if debug is False and config_data['DEBUG']['val'] is True:
+            print('Enabling Debugging from config file')
+            debug = True
+
+        if debug is True:
+            print('Processing config file line {0}: {1}'.format(i, config_lines[i]))
+
+        cline = config_lines[i].split("=")
+
+        if cline[0] in config_data:
+            if debug is True:
+                print('Found Config Token', cline[0])
+            if cline[1] == '':
+                if debug is True:
+                    print('{0} -> set to null, using default {1}'.format(cline[0], config_data[cline[0]]['val']))
+            elif config_data[cline[0]]['cast'] == 'int':
+                config_data[cline[0]]['val'] = int(cline[1])
+
+            elif config_data[cline[0]]['cast'] == 'float':
+                config_data[cline[0]]['val'] = float(cline[1])
+
+            elif config_data[cline[0]]['cast'] == 'boolean':
+                if cline[1] == 'TRUE' or cline[1] == 'True' or cline[1] == 'true' or cline[1] == 'ON':
+                    config_data[cline[0]]['val'] = True
+                elif cline[1] == 'FALSE' or cline[1] == 'False' or cline[1] == 'false' or cline[1] == 'OFF':
+                    config_data[cline[0]]['val'] = False
+                else:
+                    print('{0} -> boolean type not TRUE/FALSE using default {1}'.format(cline[0],
+                                                                                        config_data[cline[0]]['val']))
+
+            elif config_data[cline[0]]['cast'] == 'hour':
+                config_data[cline[0]]['val'] = datetime.time(hour=int(cline[1]))
+
+            else:
+                config_data[cline[0]]['val'] = cline[1]
+
+            num_tokens += 1
+
+    if debug is True:
+        print('Final config data: ', config_data)
+
+    return config_data
 
 
 def run():
@@ -595,23 +700,20 @@ def run():
     # VBAT = Pin 35
 
     # Pin definition
-    # GPIO13 = Roof motor forward pin
-    # GPIO19 = Roof motor backward pin
-    # GPIO16 = roof detect switch A detect closed pin
-    # GPIO17 = roof detect switch A detect open pin
-    # GPIO27 = roof detect switch B detect open pin
-    # GPIO22 = roof detect switch B detect close pin
-    # GPIO20 = roof closed switch comm (3v)
-    # GPIO23 = Enable motor power pin
-    # GPIO24 = Roof Lock engage pin
     #
     # Testing rain water detector sensor - not implemented
     # gs = RogySensorAnalog(36)
     # garden.register_sensor('rain_detect', RogySensorAnalog(36))
-
-    roof = RogyGardenRoof(motor_enable_pin=23, motor_forward_pin=13, motor_backward_pin=19,
-                          detect_com_pin=20, detect_a_closed_pin=16, detect_a_open_pin=17,
-                          detect_b_open_pin=27, detect_b_closed_pin=22)
+    roof = RogyGardenRoof(motor_enable_pin=garden.config['ROOF_MOTOR_ENABLE']['val'],
+                          motor_forward_pin=garden.config['ROOF_MOTOR_FORWARD']['val'],
+                          motor_backward_pin=garden.config['ROOF_MOTOR_REVERSE']['val'],
+                          detect_com_pin=garden.config['ROOF_DETECT_COMMON']['val'],
+                          detect_a_closed_pin=garden.config['ROOF_DETECT_A_CLOSED']['val'],
+                          detect_a_open_pin=garden.config['ROOF_DETECT_A_OPEN']['val'],
+                          detect_b_open_pin=garden.config['ROOF_DETECT_B_OPEN']['val'],
+                          detect_b_closed_pin=garden.config['ROOF_DETECT_B_CLOSED']['val'],
+                          debug=cfg['DEBUG']['val']
+                          )
 
     garden.register_controller('roof', roof)
 
@@ -637,7 +739,7 @@ def run():
     while True:
         garden.status_update()
         print(garden)
-        print("sending to mqt:", garden.status_json)
+        # print("sending to mqt:", garden.status_json)
         mqt.send_message(garden.status_json)
         # Debugging/testing stuff
         # if counter > 1 and counter % 2 == 0:
@@ -651,11 +753,15 @@ def run():
 
 if __name__ == '__main__':
 
+    # Read config
+    cfg = read_config(config_file='rogygarden.cfg')
+
     # Create a garden class to work with
-    garden = RogyGarden()
+    garden = RogyGarden(cfg)
 
     # Connect to AdafruitIO
-    mqt = AdafruitIOMQT(adafruitio_cfgfile='rogygarden.cfg')
+    mqt = AdafruitIOMQT(username=cfg['ADAFRUIT_IO_USERNAME']['val'], key=cfg['ADAFRUIT_IO_KEY']['val'],
+                        feed=cfg['ADAFRUIT_IO_FEED']['val'], debug=cfg['DEBUG']['val'])
 
     shutdown_reason = ''
 
@@ -667,6 +773,7 @@ if __name__ == '__main__':
 
     except:
         shutdown_reason = 'RogyGarden exception: {0}'.format(sys.exc_info()[0])
+        garden.log(shutdown_reason)
 
     finally:
         print('Cleaning up and exiting...')

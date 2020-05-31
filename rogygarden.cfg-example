@@ -1,19 +1,41 @@
-# GPIO Pin defintions (changing them not implemented yet)
-#    GPIO13 = Roof motor forward pin (motor controllers forwards)
-#    GPIO19 = Roof motor backward pin (motor controllers backwards)
-#    GPIO16 = roof detect switch A detect closed pin (Limit switch 1)
-#    GPIO17 = roof detect switch A detect open pin (Limit switch 2)
-#    GPIO27 = roof detect switch B detect open pin (Limit switch 3)
-#    GPIO22 = roof detect switch B detect close pin (Limit switch 4)
-#    GPIO20 = roof closed switch comm (3v wired to each of the limit switches)
-#    GPIO23 = Enable motor power pin (connected to relay to enable 12V to motor controller)
-#    GPIO24 = Roof Lock engage pin (not implemented)
 
-### MQTT Configuration
+#######################
+##### General Config
+
+# Enable Debugging (TRUE means debugging on, FALSE means off)
+DEBUG=FALSE
+
+#######################
+##### Roof Config
+
+### Linear Actuator motors
+# GPIO for enabling power to the Motor controller (triggers relay)
+ROOF_MOTOR_ENABLE=23
+# GPIO for Motor Controller (using SMAKN BTS7960B 43Amp Motor Driver)
+ROOF_MOTOR_FORWARD=4
+ROOF_MOTOR_REVERSE=17
+
+### GPIO for 4 micro limiter switches used to determine if the roof is open or closed.
+### An Open and Closed Switch on each side (A & B) = 4 total switches
+
+# All limiter switches common (3v wired to one GPIO)
+ROOF_DETECT_COMMON=21
+# Side A
+ROOF_DETECT_A_CLOSED=20
+ROOF_DETECT_A_OPEN=16
+# Side B
+ROOF_DETECT_B_CLOSED=24
+ROOF_DETECT_B_OPEN=25
+
+#######################
+### MQTT Configuration through Adafruit IO
+
 # Create an account at https://adafruit.io
 # Create a feed and get the AIO Key to access your account
 # Enter the information below
-
 ADAFRUIT_IO_USERNAME=your_adafruit_username
 ADAFRUIT_IO_KEY=dc5866e512024830d8alwr70368c3bb1
 ADAFRUIT_IO_FEED=/feeds/RogyGarden
+
+#######################
+### Sensor Config
