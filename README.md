@@ -14,29 +14,25 @@ bmp280 temp sensor module -> sudo pip3 install bmp280
 
 adafruit INA260 current sensor -> sudo pip3 install adafruit-blinka adafruit-circuitpython-ina260
 
-# Setup MQTT communication via Adafruit IO
-You will need to go to the adafruit.io site to setup an account.  The adafruit.io site
-is used to received the updates/commands from the garden.  Once you have an account and
-feed setup, you'll need to enter them in the config file:
+# Edit Configuration file
 
 shell> cp rogygarden.cfg-example rogygarden.cfg
 
-Edit the rogygarden.cfg file, and set your configuration for communication.  
+Edit the config file and set your GPIO pins to for the various sensors.  Defaults are in the config file.
+
+You will need to go to the adafruit.io site to setup an account so MQTT communication will work.  The adafruit.io site
+is used to received the updates/commands from the garden.  Once you have an account and feed setup, 
+you'll need to enter them in the config file:
+
+ADAFRUIT_IO_USERNAME=your_adafruit_username
+ADAFRUIT_IO_KEY=dc5866e512024830d8alwr70368c3bb1
+ADAFRUIT_IO_FEED=RogyGarden
 
 Download your favorite MQTT mobile app.  I used 'IoT MQTT Panel' on Android.  Point the app
 at the Adafruit feed and setup your MQTT app to display the JSON sent from the garden.
 
-# GPIO Pin definition
-
-    GPIO13 = Roof motor forward pin (motor controllers forwards)
-    GPIO19 = Roof motor backward pin (motor controllers backwards)
-    GPIO16 = roof detect switch A detect closed pin (Limit switch 1)
-    GPIO17 = roof detect switch A detect open pin (Limit switch 2)
-    GPIO27 = roof detect switch B detect open pin (Limit switch 3)
-    GPIO22 = roof detect switch B detect close pin (Limit switch 4)
-    GPIO20 = roof closed switch comm (3v wired to each of the limit switches)
-    GPIO23 = Enable motor power pin (connected to relay to enable 12V to motor controller)
-    GPIO24 = Roof Lock engage pin (not implemented)
+You can enable debugging in the config file by setting DEBUG=TRUE, which will dump out extra information if you
+are having problems.
 
 # Run 
 from shell> python3 rogygarden.py

@@ -95,7 +95,7 @@ class RogySensorI2C(RogySensor):
 
 class RogyBMP280(RogySensorI2C):
 
-    def __init__(self, scl_pin=22, sda_pin=21, history=5, samples_per_read=1):
+    def __init__(self, scl_pin=22, sda_pin=21, history=5, samples_per_read=10):
         super().__init__(scl_pin=scl_pin, sda_pin=sda_pin, device='BMP280', history=history, samples_per_read=samples_per_read)
 
         # self.rs_i2c_device = MP_BMP280_I2C(i2c=self.rs_i2c, address=118)
@@ -122,6 +122,17 @@ class RogyBMP280(RogySensorI2C):
 
         self.active = True
 
+    def get_relative_altitude(self):
+        baseline_size = 100
+        baseline_values = []
+        for i in range(baseline_size):
+            pressure = self._sensor.get_pressure()
+            baseline_values.append(pressure)
+            time.sleep(.1)
+
+        baseline = sum(baseline_values[:-25]) / len(baseline_values[:-25])
+        return self._sensor.get_altitude(qnh=baseline)
+
     def _read_bmp280(self):
         # return self.rs_i2c_device.temperature
         _st1 = 0
@@ -136,7 +147,9 @@ class RogyBMP280(RogySensorI2C):
         # I'm American...convert to F
         _st1 = '{:.1f}'.format(((_st1 / self.samples_per_read) * 9/5) + 32)
         _st2 = '{:.2f}'.format(_st2 / self.samples_per_read)
-        _st3 = '{:.2f}'.format(_st3 / self.samples_per_read)
+        _st3 = '{:.2f}'.format((_st3 / self.samples_per_read) * 3.28084)
+
+        # relative_altitude = '{:05.2f}'.format(self.get_relative_altitude() * 3.28084)
 
         return [self.SensorData(name='temp', val=_st1, units='F'),
                 self.SensorData(name='bar_pres', val=_st2, units='hPa'),

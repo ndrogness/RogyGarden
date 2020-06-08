@@ -365,6 +365,7 @@ class RogyGarden:
     def update_controllers(self):
 
         self.controllers_status_json = ''
+        self.health['needs_attention'] = False
 
         for c_key in self.controllers.keys():
             if self.controllers[c_key]['active'] is True:
@@ -500,9 +501,10 @@ class RogyGarden:
            self.status_update()
 
     def __str__(self):
+        rstr_h = ['{0}={1}'.format(i, self.health[i]) for i in self.health.keys()]
         rstr_s = ['{0}={1}'.format(k, self.sensors[k]['val']) for k in self.sensors.keys() if self.sensors[k]['active']]
         rstr_l = ['{0}'.format(self.event_log[i]) for i in range(0, len(self.event_log))]
-        rstr = '{0}: Sensors -> {1}, Event Log -> {2}'.format(self.health['last_update'], rstr_s, rstr_l)
+        rstr = 'Health -> {0}, Sensors -> {1}, Event Log -> {2}'.format(rstr_h, rstr_s, rstr_l)
 
         return str(rstr)
 
@@ -554,7 +556,15 @@ class AdafruitIOMQT:
         self._mqtclient.on_message = self.on_messaged
 
         # Connect to the Adafruit IO server.
-        self._mqtclient.connect()
+        while self.is_connected is False:
+            try:
+                self._mqtclient.connect()
+                self.is_connected = True
+            except:
+                print("Couldn't connect to AdafruitIO, trying again in 5...")
+                self.is_connected = False
+                time.sleep(5)
+
         # Run in background
         self._mqtclient.loop_background()
 
