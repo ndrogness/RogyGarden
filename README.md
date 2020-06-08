@@ -25,7 +25,9 @@ is used to received the updates/commands from the garden.  Once you have an acco
 you'll need to enter them in the config file:
 
 ADAFRUIT_IO_USERNAME=your_adafruit_username
+
 ADAFRUIT_IO_KEY=dc5866e512024830d8alwr70368c3bb1
+
 ADAFRUIT_IO_FEED=RogyGarden
 
 Download your favorite MQTT mobile app.  I used 'IoT MQTT Panel' on Android.  Point the app
