@@ -32,7 +32,7 @@ class RogyGardenRoof:
 
         self.roof_closed = None
 
-        detection = [{'a': None, 'b': None, 'stat': None}, {'a': None, 'b': None, 'stat': None}]
+        self.detection_switch_status = 'Not yet polled'
 
         if detect_com_pin is None:
             self._do_detection = False
@@ -160,20 +160,22 @@ class RogyGardenRoof:
         else:
             retval = self.roof_closed
 
+        rlog = ''
+        rlog += 'Common={0}'.format(self._roof_closed_detect_com.is_active)
+
+        for _swi in self._open_switches_active:
+            _rswitch = self._open_switches_active[_swi]
+            rlog += ',{0}={1}'.format(_rswitch['name'], _rswitch['obj'].is_pressed)
+
+        for _swi in self._closed_switches_active:
+            _rswitch = self._closed_switches_active[_swi]
+            rlog += ',{0}={1}'.format(_rswitch['name'], _rswitch['obj'].is_pressed)
+        rlog += ''
+
+        self.detection_switch_status = rlog
+        # garden.log(rlog)
         if self.debug is True:
-            rlog = 'Roof detect switch status: Common={0}'.format(self._roof_closed_detect_com.is_active)
-
-            rlog += ', Open Detect('
-            for _swi in self._open_switches_active:
-                _rswitch = self._open_switches_active[_swi]
-                rlog += ',{0}={1}'.format(_rswitch['name'], _rswitch['obj'].is_pressed)
-            rlog += '), Close Detect('
-            for _swi in self._closed_switches_active:
-                _rswitch = self._closed_switches_active[_swi]
-                rlog += ',{0}={1}'.format(_rswitch['name'], _rswitch['obj'].is_pressed)
-            rlog += ')'
-
-            print(rlog)
+            print('Roof detect switch status: {0}'.format(rlog))
 
         self._roof_state_detection(enable=False)
 
@@ -273,8 +275,11 @@ class RogyGardenRoof:
             garden.log('Cant toggle roof due to unknown state!')
 
     def __str__(self):
-        rstr = 'Closed={0}, CDetect={1}, Motor_enabled={2}'.format(self.roof_closed, self.roof_closed_detect_reason,
-                                                                   self._roof_motor_enable.is_active)
+        # rstr = 'Closed={0}, CDetect={1}, Motor_enabled={2}'.format(self.roof_closed, self.roof_closed_detect_reason,
+        #                                                            self._roof_motor_enable.is_active)
+        # rstr = 'CDetect":{0}, "Motor_enabled"="{1}"'.format(self.detection_switch_status,
+        #                                                     self._roof_motor_enable.is_active)
+        rstr = '{0}'.format(self.detection_switch_status)
 
         return str(rstr)
 
@@ -300,6 +305,7 @@ class RogyGardenRoof:
         for _switch in self._open_switches_active:
             _switch['obj'].close()
         '''
+
 
 class RogyGarden:
 
@@ -343,7 +349,7 @@ class RogyGarden:
 
     def log(self, msg):
         self.event_log.append('"{0}"'.format(msg))
-        # print(msg)
+        print(msg)
 
     def flush_log(self):
         self.event_log.clear()
@@ -461,6 +467,7 @@ class RogyGarden:
     def process_cmd(self, json_cmd):
 
         cmd_success = False
+        print('Received json command, will parse: {0}'.format(json_cmd))
 
         try:
             jobj = json.loads(json_cmd)
@@ -497,8 +504,8 @@ class RogyGarden:
 
     def unprotect(self):
         if self.controllers['roof']['active'] is True:
-           self.controllers['roof']['obj'].do_open()
-           self.status_update()
+            self.controllers['roof']['obj'].do_open()
+            self.status_update()
 
     def __str__(self):
         rstr_h = ['{0}={1}'.format(i, self.health[i]) for i in self.health.keys()]
@@ -728,22 +735,28 @@ def run():
     garden.register_controller('roof', roof)
 
     # Register temp sensor
-    bmp280 = rogysensor.RogyBMP280(samples_per_read=5)
-    if bmp280.active is True:
-        garden.register_sensor('temp', bmp280)
-        garden.register_sensor('bar_pres', bmp280)
-        garden.register_sensor('altitude', bmp280)
-    else:
-        print('WARNING: BMP280 sensor offline, not measuring temperature')
+    try:
+        bmp280 = rogysensor.RogyBMP280(samples_per_read=5)
+        if bmp280.active is True:
+            garden.register_sensor('temp', bmp280)
+            garden.register_sensor('bar_pres', bmp280)
+            garden.register_sensor('altitude', bmp280)
+        else:
+            print('WARNING: BMP280 sensor offline, not measuring temperature')
+    except OSError:
+        print('OSError on bus for BMP280 sensor')
 
     # Register battery system power usage
-    ina260 = rogysensor.RogyINA260(samples_per_read=5)
-    if ina260.active is True:
-        garden.register_sensor('voltage', ina260)
-        garden.register_sensor('current', ina260)
-        garden.register_sensor('power', ina260)
-    else:
-        print('WARNING: INA260 sensor offline, not measuring voltage')
+    try:
+        ina260 = rogysensor.RogyINA260(samples_per_read=5)
+        if ina260.active is True:
+            garden.register_sensor('voltage', ina260)
+            garden.register_sensor('current', ina260)
+            garden.register_sensor('power', ina260)
+        else:
+            print('WARNING: INA260 sensor offline, not measuring voltage')
+    except OSError:
+        print('OSError on bus for INA260 sensor, not measuring voltage')
 
     counter = 0
     while True:
@@ -777,17 +790,15 @@ if __name__ == '__main__':
 
     try:
         run()
-
     except KeyboardInterrupt:
         shutdown_reason = 'RogyGarden manually shutdown'
 
     except:
         shutdown_reason = 'RogyGarden exception: {0}'.format(sys.exc_info()[0])
+        print('Caught global Exception: {0}'.format(shutdown_reason))
         garden.log(shutdown_reason)
 
     finally:
         print('Cleaning up and exiting...')
         garden.free(reason=shutdown_reason)
         mqt.free()
-
-
